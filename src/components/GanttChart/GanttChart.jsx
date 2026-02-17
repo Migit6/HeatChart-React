@@ -305,7 +305,7 @@ export default function GanttChart() {
     <div className="gantt-wrapper" ref={containerRef}>
       {/* Toolbar */}
       <div className="gantt-toolbar">
-        <ExcelImport onImport={handleImport} />
+        <ExcelImport onImport={handleImport} hasData={hasData} />
         {hasData && (
           <span className="gantt-zoom-hint">
             Zoom: {Math.round((dayWidth / 7) * 100)}% — Ctrl + Mausrad
