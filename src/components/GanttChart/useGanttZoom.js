@@ -1,19 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
 
-const MIN_COL_WIDTH = 20;
-const MAX_COL_WIDTH = 120;
-const DEFAULT_COL_WIDTH = 48;
-const ZOOM_STEP = 4;
+const MIN_DAY_WIDTH = 3;
+const MAX_DAY_WIDTH = 20;
+const DEFAULT_DAY_WIDTH = 7;
 
 export default function useGanttZoom(containerRef) {
-  const [colWidth, setColWidth] = useState(DEFAULT_COL_WIDTH);
+  const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
 
   const handleWheel = useCallback((e) => {
     if (!e.ctrlKey) return;
     e.preventDefault();
-    setColWidth((prev) => {
-      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-      return Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, prev + delta));
+    setDayWidth((prev) => {
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      const next = prev * factor;
+      return Math.min(MAX_DAY_WIDTH, Math.max(MIN_DAY_WIDTH, next));
     });
   }, []);
 
@@ -24,5 +24,5 @@ export default function useGanttZoom(containerRef) {
     return () => el.removeEventListener("wheel", handleWheel);
   }, [containerRef, handleWheel]);
 
-  return colWidth;
+  return dayWidth;
 }

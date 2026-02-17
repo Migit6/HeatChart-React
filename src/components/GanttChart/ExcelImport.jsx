@@ -1,11 +1,7 @@
 import { useRef } from "react";
 import { read, utils } from "xlsx";
-import { parseExcelDate } from "./ganttUtils.js";
+import { parseProjectData } from "./ganttUtils.js";
 
-/**
- * Expected Excel columns:
- *   Projektnummer | Projektname | GL | Start | Ende | Meilenstein-Datum | Meilenstein-Label | Aufwand (comma-separated %)
- */
 export default function ExcelImport({ onImport }) {
   const fileRef = useRef();
 
@@ -15,62 +11,14 @@ export default function ExcelImport({ onImport }) {
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const wb = read(evt.target.result, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = utils.sheet_to_json(ws, { defval: "" });
+      const data = new Uint8Array(evt.target.result);
+      const wb = read(data, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rawData = utils.sheet_to_json(sheet, { header: 1, defval: null });
 
-      const projectMap = new Map();
+      const result = parseProjectData(rawData);
+      onImport(result);
 
-      for (const row of rows) {
-        const id =
-          row["Projektnummer"] || row["ProjektNr"] || row["ID"] || row["Nr"] || "";
-        const name =
-          row["Projektname"] || row["Projekt"] || row["Name"] || "";
-        const lead =
-          row["GL"] || row["Projektleitung"] || row["Lead"] || "";
-        const start = parseExcelDate(
-          row["Start"] || row["Beginn"] || row["Von"] || ""
-        );
-        const end = parseExcelDate(
-          row["Ende"] || row["Bis"] || row["End"] || ""
-        );
-        const effortRaw =
-          row["Aufwand"] || row["Effort"] || row["Kurve"] || "";
-        const msDate = parseExcelDate(
-          row["Meilenstein-Datum"] || row["MS-Datum"] || row["Milestone"] || ""
-        );
-        const msLabel =
-          row["Meilenstein-Label"] || row["MS-Label"] || row["Meilenstein"] || "";
-
-        if (!id || !name || !start || !end) continue;
-
-        const key = String(id);
-        if (!projectMap.has(key)) {
-          const effort = effortRaw
-            ? String(effortRaw)
-                .split(",")
-                .map((v) => parseFloat(v.trim()) || 0)
-            : [];
-
-          projectMap.set(key, {
-            id: key,
-            name: String(name),
-            lead: String(lead),
-            start,
-            end,
-            effort,
-            milestones: [],
-          });
-        }
-
-        const proj = projectMap.get(key);
-        if (msDate && msLabel) {
-          proj.milestones.push({ date: msDate, label: String(msLabel) });
-        }
-      }
-
-      onImport(Array.from(projectMap.values()));
-      // Reset input so the same file can be re-imported
       if (fileRef.current) fileRef.current.value = "";
     };
     reader.readAsArrayBuffer(file);

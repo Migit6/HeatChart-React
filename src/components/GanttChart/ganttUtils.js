@@ -1,211 +1,129 @@
-/** Color palette assigned to project leads (GL) */
-const LEAD_COLORS = [
-  "#4A90D9", // blue
-  "#E6783A", // orange
-  "#5BB55B", // green
-  "#CC5C76", // rose
-  "#8E6FBF", // purple
-  "#C9A832", // gold
-  "#3DBDB5", // teal
-  "#D45D5D", // red
-  "#7B8FB2", // steel
-  "#A0522D", // sienna
+/** 20 distinct, muted colors for project leads (Projektleitung) */
+const COLOR_PALETTE = [
+  "#4A90A4", "#9B6B4F", "#6B9B4F", "#8B6BA3", "#B8864F",
+  "#4F7B8B", "#A34F6B", "#6BA37B", "#8B7B4F", "#6B6BA3",
+  "#A3826B", "#4F9B7B", "#9B4F7B", "#7BA34F", "#8B4F6B",
+  "#4F8B9B", "#A36B4F", "#6B4F9B", "#9BA34F", "#4F6B9B",
 ];
 
-const leadColorMap = new Map();
-let nextColorIndex = 0;
+const managerColorMap = {};
+let assignedCount = 0;
 
-export function getLeadColor(leadName) {
-  if (!leadName) return "#999999";
-  if (!leadColorMap.has(leadName)) {
-    leadColorMap.set(leadName, LEAD_COLORS[nextColorIndex % LEAD_COLORS.length]);
-    nextColorIndex++;
+export function getManagerColor(manager) {
+  if (!manager || manager === "-") return "#999";
+  if (!managerColorMap[manager]) {
+    managerColorMap[manager] = COLOR_PALETTE[assignedCount % COLOR_PALETTE.length];
+    assignedCount++;
   }
-  return leadColorMap.get(leadName);
+  return managerColorMap[manager];
 }
 
-export function resetLeadColors() {
-  leadColorMap.clear();
-  nextColorIndex = 0;
+export function resetManagerColors() {
+  for (const key of Object.keys(managerColorMap)) delete managerColorMap[key];
+  assignedCount = 0;
+}
+
+export function getAllManagerColors() {
+  return { ...managerColorMap };
+}
+
+/** Lighten a hex color toward white */
+export function lightenColor(hex, amount = 0.6) {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substr(0, 2), 16);
+  const g = parseInt(c.substr(2, 2), 16);
+  const b = parseInt(c.substr(4, 2), 16);
+  const nr = Math.round(r + (255 - r) * amount);
+  const ng = Math.round(g + (255 - g) * amount);
+  const nb = Math.round(b + (255 - b) * amount);
+  return `rgb(${nr},${ng},${nb})`;
+}
+
+/** Shorten "Daniel Wolf" → "Daniel W." */
+export function shortenName(fullName) {
+  if (!fullName || fullName === "-") return "-";
+  const parts = fullName.trim().split(" ");
+  if (parts.length < 2) return fullName;
+  return `${parts[0]} ${parts[parts.length - 1].charAt(0)}.`;
+}
+
+/** Shorten comma-separated names */
+export function shortenNames(namesStr) {
+  if (!namesStr || namesStr === "-") return "-";
+  return namesStr
+    .split(/[,;/]+/)
+    .map((n) => shortenName(n.trim()))
+    .filter(Boolean)
+    .join(", ");
 }
 
 /**
- * Build the week columns for the timeline header.
- * Returns { months: [{ label, colSpan }], weeks: [{ label, year, month, weekNum, startDate }] }
+ * Parse Excel workbook data (raw 2D array from sheet_to_json with header:1).
+ * Format: Row 0 = headers (cols 0-4 are project info, 5+ are week ranges).
+ * Each project = 3 rows: [milestones row, effort row, extra row].
  */
-export function buildTimeline(startDate, endDate) {
-  const weeks = [];
-  const months = [];
+export function parseProjectData(rawData) {
+  const weekColumns = [];
+  const projects = [];
 
-  // Start from Monday of the week containing startDate
-  const current = new Date(startDate);
-  const dayOfWeek = current.getDay();
-  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  current.setDate(current.getDate() + diff);
-  current.setHours(0, 0, 0, 0);
+  if (!rawData || rawData.length === 0) return { projects, weekColumns };
 
-  let currentMonthLabel = "";
-  let currentMonthSpan = 0;
-
-  while (current <= endDate) {
-    const weekNum = getISOWeek(current);
-    const monthLabel = current.toLocaleDateString("de-DE", {
-      month: "short",
-      year: "numeric",
-    });
-
-    if (monthLabel !== currentMonthLabel) {
-      if (currentMonthLabel) {
-        months.push({ label: currentMonthLabel, colSpan: currentMonthSpan });
-      }
-      currentMonthLabel = monthLabel;
-      currentMonthSpan = 0;
+  // Parse week columns from header row
+  for (let i = 5; i < rawData[0].length; i++) {
+    const header = rawData[0][i];
+    if (header && typeof header === "string" && header.includes(".") && header.includes("-")) {
+      weekColumns.push({ index: i, name: header });
     }
-    currentMonthSpan++;
+  }
 
-    weeks.push({
-      label: `KW${weekNum}`,
-      year: current.getFullYear(),
-      month: current.getMonth(),
-      weekNum,
-      startDate: new Date(current),
+  // Parse projects (3 rows each)
+  for (let i = 1; i < rawData.length; i += 3) {
+    const row = rawData[i];
+    if (!row || !row[0] || typeof row[0] !== "number") continue;
+
+    // Collect processors from all 3 rows (col 4)
+    const processors = [];
+    for (let r = 0; r < 3; r++) {
+      if (i + r < rawData.length && rawData[i + r][4]) {
+        const proc = rawData[i + r][4];
+        if (proc && proc !== "" && proc !== "-") processors.push(proc);
+      }
+    }
+
+    // Effort data from row 2 (i+1)
+    const effort = [];
+    if (i + 1 < rawData.length) {
+      weekColumns.forEach((week, idx) => {
+        const val = rawData[i + 1][week.index];
+        effort.push({ week: idx, value: typeof val === "number" ? val : 0 });
+      });
+    }
+
+    const project = {
+      number: row[0],
+      name: row[1] || "Unbenannt",
+      gl: row[2] || "-",
+      manager: row[3] || "-",
+      processor: processors.join(", "),
+      effort,
+      milestones: [],
+    };
+
+    // Milestones: string values in week columns of row 1
+    weekColumns.forEach((week, idx) => {
+      const ms = row[week.index];
+      if (ms && typeof ms === "string") {
+        project.milestones.push({ week: idx, text: ms, weekName: week.name });
+      }
     });
 
-    current.setDate(current.getDate() + 7);
+    if (project.milestones.length > 0) {
+      project.startWeek = project.milestones[0].week;
+      project.endWeek = project.milestones[project.milestones.length - 1].week;
+    }
+
+    projects.push(project);
   }
 
-  if (currentMonthLabel && currentMonthSpan > 0) {
-    months.push({ label: currentMonthLabel, colSpan: currentMonthSpan });
-  }
-
-  return { months, weeks };
-}
-
-/** ISO 8601 week number */
-function getISOWeek(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-}
-
-/**
- * Calculate horizontal position and width for a bar in the Gantt area.
- * @param {Date} barStart
- * @param {Date} barEnd
- * @param {Date} timelineStart - the startDate of the first week column
- * @param {number} colWidth - pixel width per week column
- * @returns {{ left: number, width: number }}
- */
-export function getBarPosition(barStart, barEnd, timelineStart, colWidth) {
-  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-  const left = ((barStart - timelineStart) / msPerWeek) * colWidth;
-  const width = Math.max(((barEnd - barStart) / msPerWeek) * colWidth, 4);
-  return { left, width };
-}
-
-/**
- * Calculate the horizontal position for a milestone (single date).
- */
-export function getMilestonePosition(date, timelineStart, colWidth) {
-  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-  return ((date - timelineStart) / msPerWeek) * colWidth;
-}
-
-/**
- * Parse a date value from Excel (can be serial number or string).
- */
-export function parseExcelDate(value) {
-  if (value == null || value === "") return null;
-  // Excel serial date number
-  if (typeof value === "number") {
-    const epoch = new Date(1899, 11, 30);
-    return new Date(epoch.getTime() + value * 86400000);
-  }
-  // Try ISO or German date format
-  const d = new Date(value);
-  if (!isNaN(d.getTime())) return d;
-  // Try DD.MM.YYYY
-  const parts = String(value).split(".");
-  if (parts.length === 3) {
-    const parsed = new Date(parts[2], parts[1] - 1, parts[0]);
-    if (!isNaN(parsed.getTime())) return parsed;
-  }
-  return null;
-}
-
-/** Demo/sample data for when no Excel is imported */
-export function getSampleData() {
-  return [
-    {
-      id: "P-001",
-      name: "Website Redesign",
-      lead: "Müller",
-      start: new Date(2026, 0, 5),
-      end: new Date(2026, 4, 15),
-      effort: [0, 10, 30, 60, 80, 90, 100, 100, 80, 60, 40, 20, 10, 0, 0, 0, 0, 0, 0, 0],
-      milestones: [
-        { date: new Date(2026, 1, 2), label: "Kickoff" },
-        { date: new Date(2026, 3, 1), label: "Beta" },
-      ],
-    },
-    {
-      id: "P-002",
-      name: "Mobile App",
-      lead: "Schmidt",
-      start: new Date(2026, 1, 1),
-      end: new Date(2026, 7, 30),
-      effort: [0, 0, 0, 5, 15, 30, 50, 70, 85, 95, 100, 90, 70, 50, 30, 15, 5, 0, 0, 0],
-      milestones: [
-        { date: new Date(2026, 3, 15), label: "MVP" },
-        { date: new Date(2026, 6, 1), label: "Release" },
-      ],
-    },
-    {
-      id: "P-003",
-      name: "API Integration",
-      lead: "Müller",
-      start: new Date(2026, 2, 10),
-      end: new Date(2026, 5, 30),
-      effort: [0, 0, 0, 0, 10, 40, 70, 100, 100, 80, 50, 20, 0, 0, 0, 0, 0, 0, 0, 0],
-      milestones: [
-        { date: new Date(2026, 4, 20), label: "Go-Live" },
-      ],
-    },
-    {
-      id: "P-004",
-      name: "Datenmigration",
-      lead: "Weber",
-      start: new Date(2026, 3, 1),
-      end: new Date(2026, 6, 15),
-      effort: [0, 0, 0, 0, 0, 20, 50, 80, 100, 80, 50, 20, 0, 0, 0, 0, 0, 0, 0, 0],
-      milestones: [
-        { date: new Date(2026, 5, 1), label: "Migration Start" },
-      ],
-    },
-    {
-      id: "P-005",
-      name: "CI/CD Pipeline",
-      lead: "Schmidt",
-      start: new Date(2026, 0, 15),
-      end: new Date(2026, 3, 30),
-      effort: [0, 20, 50, 80, 100, 90, 60, 30, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      milestones: [
-        { date: new Date(2026, 2, 15), label: "Pipeline Live" },
-      ],
-    },
-    {
-      id: "P-006",
-      name: "Security Audit",
-      lead: "Fischer",
-      start: new Date(2026, 4, 1),
-      end: new Date(2026, 8, 30),
-      effort: [0, 0, 0, 0, 0, 0, 0, 10, 30, 60, 80, 100, 90, 70, 50, 30, 10, 0, 0, 0],
-      milestones: [
-        { date: new Date(2026, 6, 15), label: "Bericht" },
-        { date: new Date(2026, 8, 15), label: "Abschluss" },
-      ],
-    },
-  ];
+  return { projects, weekColumns };
 }
