@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HeatChart - Gantt Diagramm</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: white;
+            padding: 20px 30px;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .logo {
+            height: 60px;
+            width: auto;
+        }
+
+        .header-text {
+            flex: 1;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin: 0;
+            color: #333;
+        }
+
+        .update-btn {
+            background: #000 !important;
+            color: #fff !important;
+            border: none !important;
+            padding: 8px 15px !important;
+            border-radius: 12px !important;
+            font-size: 9px !important;
+            cursor: pointer !important;
+            font-weight: 700 !important;
+            transition: all 0.2s !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            white-space: nowrap !important;
+        }
+
+        .update-btn:hover {
+            background: #333 !important;
+        }
+
+        .update-icon {
+            width: 22px !important;
+            height: 22px !important;
+            background: #fff !important;
+            border-radius: 50% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
+        }
+
+        .update-icon svg {
+            width: 13px !important;
+            height: 13px !important;
+        }
+
+        .header p {
+            margin: 5px 0 0 0;
+            font-size: 13px;
+            color: #6c757d;
+        }
+
+        .upload-section {
+            padding: 40px;
+            text-align: center;
+            background: #f8f9fa;
+        }
+
+        .upload-box {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-box:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+
+        .content {
+            padding: 30px;
+            display: none;
+        }
+
+        .content.active {
+            display: block;
+        }
+
+        .gantt-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        .gantt {
+            display: table;
+            width: 100%;
+            min-width: 1600px;
+            border-collapse: collapse;
+        }
+
+        .gantt-month-header {
+            display: table-row;
+            background: #e9ecef;
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .gantt-month-header > div {
+            display: table-cell;
+            padding: 10px 8px;
+            border: 1px solid #dee2e6;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            background: #e9ecef;
+            z-index: 11;
+        }
+
+        .gantt-header {
+            display: table-row;
+            background: #f8f9fa;
+            font-weight: 600;
+            font-size: 11px;
+        }
+
+        .gantt-header > div {
+            display: table-cell;
+            padding: 8px 4px;
+            border: 1px solid #dee2e6;
+            text-align: center;
+            position: sticky;
+            top: 42px;
+            background: #f8f9fa;
+            z-index: 10;
+        }
+
+        .today-line {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #ef4444;
+            z-index: 3;
+            pointer-events: none;
+        }
+
+        .today-line::before {
+            content: 'HEUTE';
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ef4444;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .gantt-row {
+            display: table-row;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .gantt-row:hover {
+            background: #f8f9ff;
+        }
+
+        .project-label {
+            display: table-cell;
+            padding: 15px;
+            font-weight: 600;
+            border: 1px solid #dee2e6;
+            background: #fff;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+            min-width: 200px;
+            max-width: 200px;
+        }
+
+        .project-number {
+            display: inline-block;
+            background: #000;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 5px;
+            font-size: 11px;
+            margin-right: 8px;
+            font-weight: 700;
+        }
+
+        .project-label small {
+            display: block;
+            font-weight: 400;
+            color: #6c757d;
+            font-size: 11px;
+            margin-top: 3px;
+        }
+
+        .gantt-cell {
+            display: table-cell;
+            padding: 0;
+            border: 1px solid #e9ecef;
+            position: relative;
+            min-width: 30px;
+            height: 40px;
+            background: #fff;
+            overflow: visible;
+        }
+
+        .gantt-bar {
+            position: absolute;
+            height: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+        }
+
+        .gantt-bar:hover {
+            height: 12px;
+            box-shadow: 0 3px 8px rgba(102, 126, 234, 0.5);
+        }
+
+        .milestone {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #000;
+            border: none;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(45deg);
+            z-index: 2;
+        }
+
+        .milestone-label {
+            position: absolute;
+            top: -22px;
+            left: 50%;
+            transform: translateX(-50%) rotate(-45deg);
+            color: #000;
+            padding: 0;
+            background: none;
+            border-radius: 0;
+            font-size: 9px;
+            font-weight: 600;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 4;
+        }
+
+        .info-bar {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px 20px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            color: #856404;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .reload-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 6px 15px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .timeline-labels {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+
+        .timeline-label-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .color-box {
+            width: 20px;
+            height: 8px;
+            border-radius: 2px;
+        }
+
+        .auto-hint {
+            background: #e3f2fd;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 13px;
+        }
+
+        .auto-hint code {
+            background: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="bhc_logo.png" class="logo" alt="BHC Logo">
+            <div class="header-text">
+            </div>
+            <button class="update-btn" onclick="updateData()" id="updateBtn" style="display:none;">
+                <div class="update-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                    </svg>
+                </div>
+                Daten aktualisieren
+            </button>
+        </div>
+
+        <div class="upload-section" id="uploadSection">
+            <div class="upload-box" id="uploadBox">
+                <div style="font-size: 48px; margin-bottom: 15px;">📊</div>
+                <h2>Excel-Datei hochladen</h2>
+                <div class="auto-hint">
+                    <strong>💡 Einmalig hochladen:</strong> Nach dem ersten Upload wird die Datei 
+                    im Browser gespeichert und automatisch geladen.
+                </div>
+                <button class="btn" onclick="document.getElementById('fileInput').click()">
+                    Datei auswählen
+                </button>
+                <input type="file" id="fileInput" style="display:none;" accept=".xlsx,.xls">
+            </div>
+        </div>
+
+        <div class="content" id="contentSection">
+            <div class="gantt-container">
+                <div class="gantt" id="ganttChart"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let workbook = null;
+        let projectData = [];
+        let weekColumns = [];
+
+        // Auto-load beim Start - versuche aus localStorage
+        window.addEventListener('load', function() {
+            const savedData = localStorage.getItem('projectData');
+            if (savedData) {
+                try {
+                    const data = JSON.parse(savedData);
+                    const uint8Array = new Uint8Array(data);
+                    processWorkbook(uint8Array, 'Projektdaten.xlsx (aus Speicher)');
+                } catch (error) {
+                    console.log('Gespeicherte Daten konnten nicht geladen werden');
+                }
+            }
+        });
+
+        // Eingebettete Excel-Daten (Base64)
+        const embeddedExcelData = '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';
+
+        async function tryAutoLoad() {
+            try {
+                // Konvertiere Base64 zu Binary
+                const binaryString = atob(embeddedExcelData);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                
+                processWorkbook(bytes, 'Projektdaten.xlsx (eingebettet)');
+            } catch (error) {
+                console.error('Fehler beim Laden der eingebetteten Daten:', error);
+            }
+        }
+
+        // File Upload
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const data = new Uint8Array(e.target.result);
+                    
+                    // Speichere in localStorage für zukünftige Nutzung
+                    const dataArray = Array.from(data);
+                    localStorage.setItem('projectData', JSON.stringify(dataArray));
+                    localStorage.setItem('projectDataName', file.name);
+                    
+                    processWorkbook(data, file.name);
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+        // Drag & Drop
+        const uploadBox = document.getElementById('uploadBox');
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.style.borderColor = '#764ba2';
+        });
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.style.borderColor = '#667eea';
+        });
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.style.borderColor = '#667eea';
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const data = new Uint8Array(e.target.result);
+                    
+                    // Speichere in localStorage für zukünftige Nutzung
+                    const dataArray = Array.from(data);
+                    localStorage.setItem('projectData', JSON.stringify(dataArray));
+                    localStorage.setItem('projectDataName', file.name);
+                    
+                    processWorkbook(data, file.name);
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+        uploadBox.addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+
+        function processWorkbook(data, fileName) {
+            workbook = XLSX.read(data, { type: 'array' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+            
+            parseProjectData(rawData);
+            
+            document.getElementById('uploadSection').style.display = 'none';
+            document.getElementById('contentSection').classList.add('active');
+            document.getElementById('updateBtn').style.display = 'block';
+            
+            renderGantt();
+        }
+
+        function parseProjectData(rawData) {
+            projectData = [];
+            weekColumns = [];
+            
+            // Finde Wochen-Spalten (Header ist in Zeile 0, Wochen starten ab Spalte 5)
+            if (rawData.length > 0) {
+                for (let i = 5; i < rawData[0].length; i++) {
+                    const header = rawData[0][i];
+                    if (header && typeof header === 'string' && header.includes('.') && header.includes('-')) {
+                        weekColumns.push({ index: i, name: header });
+                    }
+                }
+            }
+            
+            // Parse Projekte (starte bei Zeile 1, jedes Projekt hat 3 Zeilen)
+            for (let i = 1; i < rawData.length; i += 3) {
+                if (rawData[i] && rawData[i][0] && typeof rawData[i][0] === 'number') {
+                    // Sammle alle Projektbearbeiter aus den 3 Zeilen (Spalte 4)
+                    const processors = [];
+                    for (let row = 0; row < 3; row++) {
+                        if (i + row < rawData.length && rawData[i + row][4]) {
+                            const proc = rawData[i + row][4];
+                            if (proc && proc !== '' && proc !== '-') {
+                                processors.push(proc);
+                            }
+                        }
+                    }
+                    
+                    // Extrahiere Aufwandsdaten aus Zeile 2 (i+1)
+                    const effortData = [];
+                    if (i + 1 < rawData.length) {
+                        weekColumns.forEach((week, idx) => {
+                            const effort = rawData[i + 1][week.index];
+                            effortData.push({
+                                week: idx,
+                                value: (effort && typeof effort === 'number') ? effort : 0
+                            });
+                        });
+                    }
+                    
+                    const project = {
+                        number: rawData[i][0],
+                        name: rawData[i][1] || 'Unbenannt',
+                        gl: rawData[i][2] || '-',
+                        manager: rawData[i][3] || '-',  // Spalte 3 = Projektleitung
+                        processor: processors.join(', '), // Alle Bearbeiter zusammen
+                        effort: effortData, // Aufwandskurve
+                        milestones: []
+                    };
+                    
+                    // Extrahiere Meilensteine aus der ersten Zeile
+                    weekColumns.forEach((week, idx) => {
+                        const milestone = rawData[i][week.index];
+                        if (milestone && typeof milestone === 'string') {
+                            project.milestones.push({ 
+                                week: idx, 
+                                text: milestone,
+                                weekName: week.name
+                            });
+                        }
+                    });
+                    
+                    // Berechne Projektstart und -ende
+                    if (project.milestones.length > 0) {
+                        project.startWeek = project.milestones[0].week;
+                        project.endWeek = project.milestones[project.milestones.length - 1].week;
+                        project.duration = project.endWeek - project.startWeek + 1;
+                    }
+                    
+                    projectData.push(project);
+                }
+            }
+        }
+
+        let dayWidth = 7; // Startbreite: 7px pro Tag (zoombar)
+        let tooltipElement = null;
+        let managerColorMap = {}; // Dynamische Farbzuordnung
+        
+        // 20 sehr unterschiedliche, dezente Farben
+        const colorPalette = [
+            '#4A90A4',  // Türkisblau
+            '#9B6B4F',  // Rotbraun
+            '#6B9B4F',  // Grasgrün
+            '#8B6BA3',  // Violett
+            '#B8864F',  // Orange
+            '#4F7B8B',  // Petrol
+            '#A34F6B',  // Himbeer
+            '#6BA37B',  // Jade
+            '#8B7B4F',  // Olive
+            '#6B6BA3',  // Indigo
+            '#A3826B',  // Cognac
+            '#4F9B7B',  // Smaragd
+            '#9B4F7B',  // Magenta
+            '#7BA34F',  // Limette
+            '#8B4F6B',  // Aubergine
+            '#4F8B9B',  // Cyan
+            '#A36B4F',  // Terra
+            '#6B4F9B',  // Lila
+            '#9BA34F',  // Senf
+            '#4F6B9B'   // Saphir
+        ];
+        
+        // Funktion um Farbe aufzuhellen (für Aufwandskurve)
+        function lightenColor(color, amount = 0.5) {
+            // Konvertiere Hex zu RGB
+            const hex = color.replace('#', '');
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            
+            // Mische mit Weiß
+            const nr = Math.round(r + (255 - r) * amount);
+            const ng = Math.round(g + (255 - g) * amount);
+            const nb = Math.round(b + (255 - b) * amount);
+            
+            return `rgb(${nr}, ${ng}, ${nb})`;
+        }
+        
+        // Funktion um Farbe für Projektleiter zu bekommen (automatische Zuweisung)
+        function getManagerColor(manager) {
+            if (!manager || manager === '-') return '#999';
+            
+            // Wenn noch nicht zugewiesen, nächste Farbe aus Palette nehmen
+            if (!managerColorMap[manager]) {
+                const assignedCount = Object.keys(managerColorMap).length;
+                managerColorMap[manager] = colorPalette[assignedCount % colorPalette.length];
+            }
+            
+            return managerColorMap[manager];
+        }
+        
+        // Funktion um Namen zu kürzen (Daniel Wolf → Daniel W.)
+        function shortenName(fullName) {
+            if (!fullName || fullName === '-') return '-';
+            const parts = fullName.trim().split(' ');
+            if (parts.length < 2) return fullName;
+            return `${parts[0]} ${parts[parts.length - 1].charAt(0)}.`;
+        }
+        
+        // Funktion um mehrere Namen zu kürzen (komma-separiert)
+        function shortenNames(namesString) {
+            if (!namesString || namesString === '-') return '-';
+            
+            // Split by comma, semicolon, or slash
+            const names = namesString.split(/[,;\/]+/).map(n => n.trim()).filter(n => n);
+            
+            return names.map(name => shortenName(name)).join(', ');
+        }
+        
+        function renderGantt() {
+            const gantt = document.getElementById('ganttChart');
+            
+            // Erstelle Tagesstruktur: 16.02.2025 bis 03.01.2026
+            const startDate = new Date(2025, 1, 16);
+            const endDate = new Date(2026, 0, 3);
+            
+            const allDays = [];
+            let current = new Date(startDate);
+            while (current <= endDate) {
+                allDays.push(new Date(current));
+                current.setDate(current.getDate() + 1);
+            }
+            
+            console.log(`Total days: ${allDays.length}, Day width: ${dayWidth}px`);
+            
+            // Gruppiere Tage in Monate
+            const months = [];
+            let currentMonth = null;
+            
+            allDays.forEach((day, idx) => {
+                const monthKey = `${day.getFullYear()}-${day.getMonth()}`;
+                if (!currentMonth || currentMonth.key !== monthKey) {
+                    const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 
+                                       'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+                    currentMonth = {
+                        key: monthKey,
+                        name: monthNames[day.getMonth()],
+                        start: idx,
+                        end: idx
+                    };
+                    months.push(currentMonth);
+                } else {
+                    currentMonth.end = idx;
+                }
+            });
+            
+            // Erstelle Canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = 200 + allDays.length * dayWidth;
+            canvas.height = 55 + projectData.length * 40;
+            canvas.style.border = '1px solid #ddd';
+            canvas.style.display = 'block';
+            canvas.style.cursor = 'default';
+            
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Zeichne Monatszeile
+            ctx.font = 'bold 11px Arial';
+            ctx.fillStyle = '#000';
+            
+            let xPos = 200;
+            months.forEach(month => {
+                const dayCount = month.end - month.start + 1;
+                const totalWidth = dayCount * dayWidth;
+                const boxWidth = totalWidth - dayWidth * 2; // 2 Tage Abstand
+                
+                const boxX = xPos + dayWidth;
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.roundRect(boxX, 4, boxWidth, 18, 5);
+                ctx.fill();
+                
+                ctx.fillStyle = '#fff';
+                ctx.font = '600 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(month.name, boxX + boxWidth/2, 16);
+                
+                xPos += totalWidth;
+            });
+            
+            // Zeichne Wochenzeile
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'left';
+            
+            xPos = 200;
+            weekColumns.forEach((week, wIdx) => {
+                const weekWidth = 7 * dayWidth;
+                
+                const weekStart = week.name.split(' - ')[0].replace('.', '.');
+                
+                ctx.fillStyle = '#333';
+                ctx.font = '9px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(weekStart, xPos + weekWidth/2, 43);
+                
+                // Wochentrennlinie
+                const lineX = xPos + weekWidth;
+                ctx.strokeStyle = '#bbb';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(lineX, 25);
+                ctx.lineTo(lineX, 55 + projectData.length * 40);
+                ctx.stroke();
+                
+                xPos += weekWidth;
+            });
+            
+            // Zeichne Projektzeilen
+            projectData.forEach((project, pIdx) => {
+                const yPos = 55 + pIdx * 40;
+                
+                ctx.fillStyle = '#000';
+                ctx.fillRect(10, yPos + 10, 40, 20);
+                ctx.fillStyle = '#fff';
+                ctx.font = '700 11px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(project.number, 30, yPos + 24);
+                
+                ctx.fillStyle = '#000';
+                ctx.textAlign = 'left';
+                ctx.font = '13px Arial';
+                ctx.fillText(project.name, 55, yPos + 18);
+                
+                const glShort = shortenName(project.gl);
+                ctx.fillStyle = '#666';
+                ctx.font = '9px Arial';
+                ctx.fillText(glShort, 55, yPos + 30);
+                
+                // Tageslinien (nur bei Zoom > 5px)
+                if (dayWidth >= 5) {
+                    xPos = 200;
+                    allDays.forEach((day, dIdx) => {
+                        ctx.strokeStyle = '#e0e0e0';
+                        ctx.lineWidth = 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(xPos + dayWidth, yPos);
+                        ctx.lineTo(xPos + dayWidth, yPos + 40);
+                        ctx.stroke();
+                        
+                        xPos += dayWidth;
+                    });
+                }
+                
+                // Zeichne Balken zwischen Meilensteinen
+                if (project.milestones.length > 1) {
+                    const projectColor = getManagerColor(project.manager);
+                    
+                    for (let i = 0; i < project.milestones.length - 1; i++) {
+                        const startMilestone = project.milestones[i];
+                        const endMilestone = project.milestones[i + 1];
+                        
+                        const startX = 200 + (startMilestone.week * 7 * dayWidth) + (3.5 * dayWidth);
+                        const endX = 200 + (endMilestone.week * 7 * dayWidth) + (3.5 * dayWidth);
+                        const barY = yPos + 20;
+                        
+                        // Schmaler Balken (4px hoch) in Projektleiter-Farbe
+                        ctx.fillStyle = projectColor;
+                        ctx.fillRect(startX, barY - 2, endX - startX, 4);
+                    }
+                }
+                
+                // Zeichne Aufwandskurve (über dem Balken) - zwischen Meilensteinen
+                if (project.effort && project.effort.length > 0 && project.milestones.length > 0) {
+                    const projectColor = getManagerColor(project.manager);
+                    const curveColor = lightenColor(projectColor, 0.6);
+                    
+                    // Finde maximalen Aufwand für Skalierung
+                    const maxEffort = Math.max(...project.effort.map(e => e.value), 10);
+                    const curveHeight = 20; // max 20px hoch
+                    
+                    ctx.fillStyle = curveColor;
+                    ctx.strokeStyle = curveColor;
+                    ctx.lineWidth = 1.5;
+                    
+                    // Zeichne separate Kurven zwischen Meilensteinen
+                    for (let m = 0; m < project.milestones.length - 1; m++) {
+                        const startMilestone = project.milestones[m];
+                        const endMilestone = project.milestones[m + 1];
+                        
+                        ctx.beginPath();
+                        
+                        // Start bei Meilenstein (null)
+                        const startX = 200 + (startMilestone.week * 7 * dayWidth) + (3.5 * dayWidth);
+                        ctx.moveTo(startX, yPos + 20 - 5);
+                        
+                        // Zeichne Kurve zwischen den Meilensteinen
+                        for (let week = startMilestone.week; week <= endMilestone.week; week++) {
+                            const effortPoint = project.effort.find(e => e.week === week);
+                            const weekX = 200 + (week * 7 * dayWidth) + (3.5 * dayWidth);
+                            
+                            if (effortPoint && effortPoint.value > 0) {
+                                const effortHeight = (effortPoint.value / maxEffort) * curveHeight;
+                                const curveY = yPos + 20 - effortHeight - 5;
+                                ctx.lineTo(weekX, curveY);
+                            } else {
+                                ctx.lineTo(weekX, yPos + 20 - 5); // null wenn kein Aufwand
+                            }
+                        }
+                        
+                        // Ende bei Meilenstein (null)
+                        const endX = 200 + (endMilestone.week * 7 * dayWidth) + (3.5 * dayWidth);
+                        ctx.lineTo(endX, yPos + 20 - 5);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    }
+                }
+                
+                // Zeichne Meilensteine
+                project.milestones.forEach(milestone => {
+                    const milestoneX = 200 + (milestone.week * 7 * dayWidth) + (3.5 * dayWidth); // Mitte der Woche
+                    const milestoneY = yPos + 20;
+                    
+                    // Schwarze Raute (gedreht um 45°) - kleiner: 8x8px
+                    ctx.fillStyle = '#000';
+                    ctx.save();
+                    ctx.translate(milestoneX, milestoneY);
+                    ctx.rotate(Math.PI / 4); // 45° Drehung
+                    ctx.fillRect(-4, -4, 8, 8);
+                    ctx.restore();
+                    
+                    // Meilenstein-Text - 10px über Raute
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 9px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(milestone.text, milestoneX, milestoneY - 10);
+                });
+            });
+            
+            // Zoom-Hinweis
+            ctx.fillStyle = '#999';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText(`Zoom: ${Math.round(dayWidth / 7 * 100)}% (Ctrl+Mausrad)`, canvas.width - 10, canvas.height - 5);
+            
+            gantt.innerHTML = '';
+            gantt.appendChild(canvas);
+            
+            // Erstelle Tooltip-Element wenn nicht vorhanden
+            if (!tooltipElement) {
+                tooltipElement = document.createElement('div');
+                tooltipElement.style.position = 'absolute';
+                tooltipElement.style.background = 'none';
+                tooltipElement.style.color = '#000';
+                tooltipElement.style.padding = '2px';
+                tooltipElement.style.fontSize = '10px';
+                tooltipElement.style.fontWeight = 'bold';
+                tooltipElement.style.pointerEvents = 'none';
+                tooltipElement.style.display = 'none';
+                tooltipElement.style.zIndex = '1000';
+                tooltipElement.style.whiteSpace = 'nowrap';
+                document.body.appendChild(tooltipElement);
+            }
+            
+            // Füge Mousemove Handler für Tooltip hinzu
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                // Prüfe ob Maus über einem Balken ist
+                let foundProject = null;
+                projectData.forEach((project, pIdx) => {
+                    const yPos = 55 + pIdx * 40;
+                    
+                    if (mouseY >= yPos + 18 && mouseY <= yPos + 22) { // Balken ist bei Y=20, +/- 2px
+                        // Prüfe ob in Balkenbereich
+                        if (project.milestones.length > 0) {
+                            const firstX = 200 + (project.milestones[0].week * 7 * dayWidth);
+                            const lastX = 200 + (project.milestones[project.milestones.length - 1].week * 7 * dayWidth) + (7 * dayWidth);
+                            
+                            if (mouseX >= firstX && mouseX <= lastX) {
+                                foundProject = project;
+                            }
+                        }
+                    }
+                });
+                
+                if (foundProject) {
+                    const managerShort = shortenName(foundProject.manager);
+                    const processorShort = shortenNames(foundProject.processor); // Mehrere Namen möglich
+                    tooltipElement.textContent = `${managerShort}, ${processorShort}`;
+                    tooltipElement.style.display = 'block';
+                    tooltipElement.style.left = (e.clientX + 8) + 'px';
+                    tooltipElement.style.top = (e.clientY - 15) + 'px';
+                    canvas.style.cursor = 'pointer';
+                } else {
+                    tooltipElement.style.display = 'none';
+                    canvas.style.cursor = 'default';
+                }
+            });
+            
+            canvas.addEventListener('mouseleave', () => {
+                tooltipElement.style.display = 'none';
+                canvas.style.cursor = 'default';
+            });
+            
+            // Füge Zoom-Funktionalität hinzu
+            canvas.addEventListener('wheel', handleZoom);
+        }
+        
+        function handleZoom(e) {
+            if (e.ctrlKey) {
+                e.preventDefault();
+                
+                const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+                const newWidth = dayWidth * zoomFactor;
+                
+                // Begrenze Zoom: 3px - 20px pro Tag
+                if (newWidth >= 3 && newWidth <= 20) {
+                    dayWidth = newWidth;
+                    renderGantt();
+                }
+            }
+        }
+
+        function updateData() {
+            // Zeige Upload-Section wieder an
+            document.getElementById('uploadSection').style.display = 'block';
+            document.getElementById('contentSection').classList.remove('active');
+            document.getElementById('updateBtn').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
