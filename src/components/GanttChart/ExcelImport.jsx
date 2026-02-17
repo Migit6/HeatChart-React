@@ -2,9 +2,9 @@ import { useRef, useEffect } from "react";
 import { read, utils } from "xlsx";
 import { parseProjectData } from "./ganttUtils.js";
 
-const STORAGE_KEY = "gantt_excel_data";
+export const STORAGE_KEY = "gantt_excel_data";
 
-function processExcelData(data) {
+export function processExcelData(data) {
   const wb = read(data, { type: "array" });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rawData = utils.sheet_to_json(sheet, { header: 1, defval: null });

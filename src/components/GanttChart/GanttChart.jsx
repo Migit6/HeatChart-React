@@ -8,7 +8,7 @@ import {
   shortenNames,
 } from "./ganttUtils.js";
 import useGanttZoom from "./useGanttZoom.js";
-import ExcelImport from "./ExcelImport.jsx";
+import ExcelImport, { processExcelData, STORAGE_KEY } from "./ExcelImport.jsx";
 import "./GanttChart.css";
 
 const ROW_HEIGHT = 40;
@@ -21,6 +21,8 @@ export default function GanttChart() {
   const [projects, setProjects] = useState([]);
   const [weekColumns, setWeekColumns] = useState([]);
   const [tooltip, setTooltip] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const headerCanvasRef = useRef(null);
@@ -38,6 +40,35 @@ export default function GanttChart() {
     resetManagerColors();
     setProjects(result.projects);
     setWeekColumns(result.weekColumns);
+  }
+
+  // Drag & drop handlers
+  function handleDragEnter(e) {
+    e.preventDefault();
+    dragCounter.current++;
+    setIsDragging(true);
+  }
+  function handleDragLeave(e) {
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current === 0) setIsDragging(false);
+  }
+  function handleDragOver(e) {
+    e.preventDefault();
+  }
+  function handleDrop(e) {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const data = new Uint8Array(evt.target.result);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(data)));
+      handleImport(processExcelData(data));
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   // Sync horizontal scroll
@@ -302,7 +333,14 @@ export default function GanttChart() {
   const hasData = projects.length > 0;
 
   return (
-    <div className="gantt-wrapper" ref={containerRef}>
+    <div
+      className="gantt-wrapper"
+      ref={containerRef}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {/* Toolbar */}
       <div className="gantt-toolbar">
         <ExcelImport onImport={handleImport} hasData={hasData} />
@@ -416,6 +454,15 @@ export default function GanttChart() {
             </div>
           )}
         </>
+      )}
+
+      {/* Drop overlay */}
+      {isDragging && (
+        <div className="gantt-drop-overlay">
+          <div className="gantt-drop-overlay-content">
+            Excel-Datei hier ablegen
+          </div>
+        </div>
       )}
     </div>
   );
